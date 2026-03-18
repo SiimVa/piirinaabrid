@@ -122,21 +122,27 @@ st.set_page_config(page_title="Piirinaabrid", layout="wide")
 st.title("Piirinaabrite leidja")
 st.write("Rakendus leiab valitud katastriüksuse naabrid etteantud puhvri sees.")
 
+if "search_result" not in st.session_state:
+    st.session_state.search_result = None
+if "search_error" not in st.session_state:
+    st.session_state.search_error = None
+
 with st.sidebar:
     st.header("Sisend")
-    katastritunnus = st.text_input(
-        "Katastritunnus",
-        value="",
-        placeholder="Nt 18502:005:0366",
-    )
-    radius = st.number_input(
-        "Raadius meetrites",
-        min_value=1,
-        max_value=1000,
-        value=10,
-        step=1,
-    )
-    search_clicked = st.button("Leia naabrid", type="primary")
+    with st.form("search_form"):
+        katastritunnus = st.text_input(
+            "Katastritunnus",
+            value="",
+            placeholder="Nt 18502:005:0366",
+        )
+        radius = st.number_input(
+            "Raadius meetrites",
+            min_value=1,
+            max_value=1000,
+            value=10,
+            step=1,
+        )
+        search_clicked = st.form_submit_button("Leia naabrid", type="primary")
 
 if search_clicked:
     try:
@@ -164,25 +170,50 @@ if search_clicked:
         existing_columns = [col for col in result_columns if col in neighbors_gdf.columns]
         result_df = neighbors_gdf[existing_columns].copy()
 
-        st.subheader("Tulemused")
-        st.write(f"Leitud naaberkatastriüksuste arv: **{len(result_df)}**")
-        st.dataframe(result_df, use_container_width=True)
-
-        csv_filename = f"{katastritunnus.strip()}_{radius}m.csv"
-        st.download_button(
-            label="Laadi CSV alla",
-            data=dataframe_to_csv_bytes(result_df),
-            file_name=csv_filename,
-            mime="text/csv",
-        )
-
-        st.subheader("Kaart")
-        parcel_map = build_map(input_parcel, neighbors_gdf, buffer_geom)
-        st_folium(parcel_map, width=None, height=600, use_container_width=True)
+        st.session_state.search_result = {
+            "katastritunnus": katastritunnus.strip(),
+            "radius": radius,
+            "input_parcel": input_parcel,
+            "neighbors_gdf": neighbors_gdf,
+            "buffer_geom": buffer_geom,
+            "result_df": result_df,
+        }
+        st.session_state.search_error = None
 
     except requests.RequestException as exc:
-        st.error(f"Andmepäring ebaõnnestus: {exc}")
+        st.session_state.search_result = None
+        st.session_state.search_error = f"Andmepäring ebaõnnestus: {exc}"
     except Exception as exc:
-        st.error(f"Tekkis ootamatu viga: {exc}")
+        st.session_state.search_result = None
+        st.session_state.search_error = f"Tekkis ootamatu viga: {exc}"
+
+if st.session_state.search_error:
+    st.error(st.session_state.search_error)
+
+if st.session_state.search_result:
+    search_result = st.session_state.search_result
+    result_df = search_result["result_df"]
+
+    st.subheader("Tulemused")
+    st.write(f"Leitud naaberkatastriüksuste arv: **{len(result_df)}**")
+    st.dataframe(result_df, use_container_width=True)
+
+    csv_filename = (
+        f"{search_result['katastritunnus']}_{search_result['radius']}m.csv"
+    )
+    st.download_button(
+        label="Laadi CSV alla",
+        data=dataframe_to_csv_bytes(result_df),
+        file_name=csv_filename,
+        mime="text/csv",
+    )
+
+    st.subheader("Kaart")
+    parcel_map = build_map(
+        search_result["input_parcel"],
+        search_result["neighbors_gdf"],
+        search_result["buffer_geom"],
+    )
+    st_folium(parcel_map, height=600, use_container_width=True)
 else:
     st.info("Sisesta katastritunnus ja vajuta \"Leia naabrid\".")

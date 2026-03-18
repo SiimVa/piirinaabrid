@@ -70,6 +70,23 @@ def build_map(
     ).add_to(parcel_map)
 
     if not neighbors_latlon.empty:
+        tooltip_fields = [
+            field for field in ["tunnus", "l_aadress", "siht1"]
+            if field in neighbors_latlon.columns
+        ]
+        tooltip_aliases = {
+            "tunnus": "Tunnus",
+            "l_aadress": "Aadress",
+            "siht1": "Sihtotstarve",
+        }
+        geojson_tooltip = None
+        if tooltip_fields:
+            geojson_tooltip = folium.GeoJsonTooltip(
+                fields=tooltip_fields,
+                aliases=[tooltip_aliases[field] for field in tooltip_fields],
+                localize=True,
+            )
+
         folium.GeoJson(
             data=neighbors_latlon.__geo_interface__,
             style_function=lambda _: {
@@ -77,11 +94,7 @@ def build_map(
                 "fillOpacity": 0.1,
                 "weight": 1,
             },
-            tooltip=folium.GeoJsonTooltip(
-                fields=["tunnus", "l_aadress", "siht1"],
-                aliases=["Tunnus", "Aadress", "Sihtotstarve"],
-                localize=True,
-            ),
+            tooltip=geojson_tooltip,
         ).add_to(parcel_map)
 
     folium.GeoJson(
@@ -111,7 +124,11 @@ st.write("Rakendus leiab valitud katastriüksuse naabrid etteantud puhvri sees."
 
 with st.sidebar:
     st.header("Sisend")
-    katastritunnus = st.text_input("Katastritunnus", value="18502:005:0366")
+    katastritunnus = st.text_input(
+        "Katastritunnus",
+        value="",
+        placeholder="Nt 18502:005:0366",
+    )
     radius = st.number_input(
         "Raadius meetrites",
         min_value=1,
@@ -123,6 +140,10 @@ with st.sidebar:
 
 if search_clicked:
     try:
+        if not katastritunnus.strip():
+            st.error("Sisesta katastritunnus.")
+            st.stop()
+
         with st.spinner("Pärin katastriandmeid..."):
             input_parcel = get_feature_by_tunnus(katastritunnus.strip())
 
